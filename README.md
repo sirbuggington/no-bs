@@ -1,43 +1,70 @@
 # no-bs
 
-A Claude Code skill that turns off default sycophantic softening for the rest of the conversation.
+A Claude Code skill that turns off default sycophantic softening for the rest of the conversation. Real on/off toggle, no per-chat re-invocation needed.
 
 While active, the assistant operates as a senior expert who tells the truth — including saying "this is good, ship it" when that's the honest answer. No manufactured concerns, no "you might want to consider…" hedges, no praise sandwich. It pushes back when you're wrong, agrees when you're right, and asks for clarification when it doesn't have enough context to do either.
 
 The opposite of sycophantic. *Not* the same as adversarial — it doesn't disagree with you for sport.
 
+## How it works
+
+A `UserPromptSubmit` hook (`~/.claude/hooks/no-bs-route.py`) runs on every prompt. While `mode = "on"`, the hook injects a short tone-anchor reminder so Claude doesn't drift back to default behavior. While `mode = "off"`, the hook exits silently and Claude is unchanged.
+
+The toggle is a flag file at `~/.claude/no-bs-mode.json`. `/no-bs on` and `/no-bs off` flip it. The hook reads it on every prompt — so the toggle takes effect immediately, persists across sessions, and only goes away if you uninstall.
+
 ## Install
 
-### Option 1: Clone
+You need Python 3.9+ already on your machine (`py -3 --version` on Windows, `python3 --version` on macOS/Linux).
 
 ```bash
-git clone https://github.com/sirbuggington/no-bs.git ~/.claude/skills/no-bs
+git clone https://github.com/sirbuggington/no-bs.git
+cd no-bs
 ```
 
-That's it. Restart Claude Code and the skill is available.
+Then run the installer:
 
-### Option 2: Download the single file
+- **Windows:** `py -3 install.py`
+- **macOS / Linux:** `python3 install.py`
 
-Download [SKILL.md](https://raw.githubusercontent.com/sirbuggington/no-bs/main/SKILL.md) and save it to:
+That's it. Restart Claude Code and `/no-bs` is available in any chat.
 
-- **Windows:** `C:\Users\<you>\.claude\skills\no-bs\SKILL.md`
-- **macOS / Linux:** `~/.claude/skills/no-bs/SKILL.md`
+The installer is idempotent — safe to re-run after `git pull` to update.
 
-(Create the `no-bs` folder if it doesn't exist.)
+### Preview before installing
 
-Restart Claude Code.
+```bash
+python3 install.py --dry-run
+```
+
+Prints what it would do without changing anything.
+
+### Uninstall
+
+```bash
+python3 install.py --uninstall
+```
+
+Removes the hook from `settings.json`, deletes the skill / hook / wrapper / mode file. Leaves your other settings untouched.
 
 ## Use
 
-Once installed, invoke it in any chat:
+Once installed, no-bs is **on by default**. Every non-trivial prompt gets the tone-anchor.
 
 ```
-/no-bs
+/no-bs              show current mode
+/no-bs status       same as above
+/no-bs on           enable
+/no-bs off          disable (hook stays installed but exits silently)
+/no-bs help         show help
 ```
 
-Or just ask: "use the no-bs skill" / "enable no-bs mode".
+The state persists across sessions — `/no-bs off` stays off until you `/no-bs on` again.
 
-The skill stays active for the rest of that conversation. There's no off-switch by design — to turn it off, start a new chat.
+### What gets skipped automatically (regardless of mode)
+
+- Prompts starting with `/peer`, `/clarify`, or `/no-bs` (and `-*` variants) — those skills own those turns
+- Prompts under 5 characters
+- Pure acknowledgements: `thanks`, `ok`, `yes`, `hello`, etc.
 
 ## What it does
 
@@ -57,16 +84,30 @@ The skill stays active for the rest of that conversation. There's no off-switch 
 
 ## How to test it
 
-After installing, try this in a fresh chat with the skill enabled:
+After installing, in a fresh chat:
 
-1. Pitch it an idea you actually like and want validated. See if it agrees, pushes back honestly, or manufactures fake concerns.
-2. Push back on a piece of its criticism with "are you sure?" — see if it holds ground or folds.
-3. Push back with an actual counter-argument that addresses the criticism — see if it concedes plainly.
+1. `/no-bs status` — confirm it's on.
+2. Pitch it an idea you actually like and want validated. See if it agrees plainly, pushes back honestly, or manufactures fake concerns.
+3. Push back on a piece of its criticism with "are you sure?" — see if it holds ground or folds.
+4. Push back with an actual counter-argument that addresses the criticism — see if it concedes plainly.
+5. `/no-bs off` — try the same prompts. Tone should noticeably soften back to default.
 
-If steps 1-3 all behave as described, the skill is working.
+## Files installed
+
+| Path | Purpose |
+|---|---|
+| `~/.claude/skills/no-bs/SKILL.md` | Full behavior spec |
+| `~/.claude/hooks/no-bs-route.py` | Per-prompt injector |
+| `~/.claude/commands/no-bs.md` | Slash-command wrapper |
+| `~/.claude/no-bs-mode.json` | Mode state (`on` / `off`) |
+| `~/.claude/settings.json` | Patched to register the hook (other entries untouched) |
+
+The hook fails open: if it crashes for any reason, your prompt still reaches Claude — worst case is the reminder doesn't fire, never that messages get swallowed.
 
 ## Origin
 
 Inspired by [mattpocock/grill-me](https://skills.sh/mattpocock/skills/grill-me), but different: grill-me is a Socratic interviewer for plans/designs only. no-bs changes tone for the entire conversation across all topics.
 
-The spec went through two rounds of cross-model peer review (Codex caught real gaps in the first draft) before this SKILL.md was written.
+The architecture (UserPromptSubmit hook + mode file + slash command wrapper) mirrors the same pattern used by Claude Code's `/clarify` skill, which is the right shape for any "always-on with toggle" behavior modifier.
+
+The spec and reminder text both went through cross-model peer review (Codex caught real gaps) before being locked.
